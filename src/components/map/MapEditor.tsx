@@ -5,16 +5,32 @@ import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
-import type { GeoJsonPoint, GeoJsonPolygon, MapBounds, Zone } from "@/types/database";
-import { DEFAULT_MAP_CENTER } from "@/lib/constants";
+import type {
+  GeoJsonPoint,
+  GeoJsonPolygon,
+  IrrigationType,
+  MapBounds,
+  ShadeLevel,
+  SlopeLevel,
+  SoilType,
+  VegetationType,
+  Zone,
+} from "@/types/database";
+import { DEFAULT_MAP_CENTER, DEFAULT_ZONE_ATTRIBUTES } from "@/lib/constants";
 import { getZoneColor, zonesToGeoJson, pointsToGeoJson } from "./zone-layer";
 
 export type MapEditorMode = "property" | "zones" | "valves" | "controllers" | "view";
 
 export type DraftZone = {
   id?: string;
+  drawId?: string;
   name: string;
   geometry: GeoJsonPolygon;
+  vegetation_type: VegetationType;
+  shade_level: ShadeLevel;
+  slope_level: SlopeLevel;
+  soil_type: SoilType;
+  irrigation_type: IrrigationType;
 };
 
 export type DraftValve = {
@@ -42,12 +58,17 @@ type MapEditorProps = {
   onZonesChange?: (zones: DraftZone[]) => void;
   onValvePlaced?: (valve: DraftValve) => void;
   onControllerPlaced?: (controller: DraftController) => void;
-  onZoneSelect?: (zoneId: string | null) => void;
+  onZoneSelect?: (zoneKey: string | null) => void;
   onPointSelect?: (pointId: string | null) => void;
+  drawTrigger?: number;
   className?: string;
 };
 
 const SATELLITE_STYLE = "mapbox://styles/mapbox/satellite-streets-v12";
+
+function zoneKey(zone: DraftZone): string {
+  return zone.drawId ?? zone.id ?? zone.name;
+}
 
 export function MapEditor({
   mode,
@@ -62,23 +83,50 @@ export function MapEditor({
   onValvePlaced,
   onControllerPlaced,
   onZoneSelect,
-  onPointSelect,
+  drawTrigger = 0,
   className = "h-[500px] w-full rounded-lg",
 }: MapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
+  const zoneMetaRef = useRef<Map<string, DraftZone>>(new Map());
+  const zonesPropRef = useRef(zones);
+  zonesPropRef.current = zones;
 
-  const handleDrawUpdate = useCallback(() => {
+  useEffect(() => {
+    (zones as DraftZone[]).forEach((zone) => {
+      if (zone.drawId) zoneMetaRef.current.set(zone.drawId, zone);
+    });
+  }, [zones]);
+
+  const syncZonesFromDraw = useCallback(() => {
     if (!drawRef.current || !onZonesChange) return;
+
     const data = drawRef.current.getAll();
-    const draftZones: DraftZone[] = data.features
-      .filter((f) => f.geometry.type === "Polygon")
-      .map((f, index) => ({
-        id: f.id as string | undefined,
+    const polygons = data.features.filter((f) => f.geometry.type === "Polygon");
+
+    const draftZones: DraftZone[] = polygons.map((f, index) => {
+      const drawId = String(f.id);
+      const existing =
+        zoneMetaRef.current.get(drawId) ??
+        (zonesPropRef.current as DraftZone[]).find((z) => z.drawId === drawId);
+
+      const base: DraftZone = existing ?? {
         name: `Zone ${index + 1}`,
         geometry: f.geometry as GeoJsonPolygon,
-      }));
+        ...DEFAULT_ZONE_ATTRIBUTES,
+      };
+
+      const merged: DraftZone = {
+        ...base,
+        drawId,
+        geometry: f.geometry as GeoJsonPolygon,
+      };
+
+      zoneMetaRef.current.set(drawId, merged);
+      return merged;
+    });
+
     onZonesChange(draftZones);
   }, [onZonesChange]);
 
@@ -102,10 +150,7 @@ export function MapEditor({
 
     const draw = new MapboxDraw({
       displayControlsDefault: false,
-      controls: {
-        polygon: false,
-        trash: false,
-      },
+      controls: { polygon: false, trash: false },
       defaultMode: "simple_select",
     });
 
@@ -114,29 +159,9 @@ export function MapEditor({
         map.fitBounds(bounds, { padding: 40, maxZoom: 19 });
       }
 
-      map.addSource("zones", {
+      map.addSource("zones-display", {
         type: "geojson",
-        data: zonesToGeoJson(zones as Zone[]),
-      });
-
-      map.addLayer({
-        id: "zones-fill",
-        type: "fill",
-        source: "zones",
-        paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": ["case", ["get", "selected"], 0.55, 0.35],
-        },
-      });
-
-      map.addLayer({
-        id: "zones-outline",
-        type: "line",
-        source: "zones",
-        paint: {
-          "line-color": ["get", "color"],
-          "line-width": ["case", ["get", "selected"], 3, 1.5],
-        },
+        data: { type: "FeatureCollection", features: [] },
       });
 
       map.addSource("equipment", {
@@ -178,61 +203,62 @@ export function MapEditor({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-
-    if (center) {
-      map.flyTo({ center, zoom: 18 });
-    }
-    if (bounds) {
-      map.fitBounds(bounds, { padding: 40, maxZoom: 19 });
-    }
-  }, [center, bounds]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    const draw = drawRef.current;
     if (!map) return;
 
-    const updateLayers = () => {
-      const zonesSource = map.getSource("zones") as mapboxgl.GeoJSONSource | undefined;
-      if (zonesSource) {
-        zonesSource.setData(zonesToGeoJson(zones as Zone[], selectedZoneId));
-      }
-
-      const equipmentSource = map.getSource("equipment") as mapboxgl.GeoJSONSource | undefined;
-      if (equipmentSource) {
-        equipmentSource.setData(
-          pointsToGeoJson(
-            [
-              ...valves.map((v) => ({ ...v, kind: "valve" as const })),
-              ...controllers.map((c) => ({ ...c, kind: "controller" as const })),
-            ],
-            selectedPointId
-          )
-        );
-      }
+    const fly = () => {
+      if (center) map.flyTo({ center, zoom: 18 });
+      if (bounds) map.fitBounds(bounds, { padding: 40, maxZoom: 19 });
     };
 
-    if (map.isStyleLoaded()) {
-      updateLayers();
-    } else {
-      map.once("load", updateLayers);
-    }
-  }, [zones, valves, controllers, selectedZoneId, selectedPointId]);
+    if (map.isStyleLoaded()) fly();
+    else map.once("load", fly);
+  }, [center, bounds]);
 
+  // Zones mode: MapboxDraw only (avoids layer conflicts + enables multi-polygon)
   useEffect(() => {
     const map = mapRef.current;
     const draw = drawRef.current;
     if (!map || !draw) return;
 
+    const onCreate = () => {
+      syncZonesFromDraw();
+      draw.changeMode("draw_polygon");
+    };
+    const onUpdate = () => syncZonesFromDraw();
+    const onDelete = () => syncZonesFromDraw();
+    const onSelectionChange = (e: { features: GeoJSON.Feature[] }) => {
+      if (!onZoneSelect) return;
+      const feature = e.features[0];
+      onZoneSelect(feature?.id != null ? String(feature.id) : null);
+    };
+
     if (mode === "zones") {
       if (!map.hasControl(draw as unknown as mapboxgl.IControl)) {
         map.addControl(draw);
       }
-      draw.changeMode("draw_polygon");
-      map.on("draw.create", handleDrawUpdate);
-      map.on("draw.update", handleDrawUpdate);
-      map.on("draw.delete", handleDrawUpdate);
+
+      const draftZones = zonesPropRef.current as DraftZone[];
+      if (draftZones.length > 0 && draw.getAll().features.length === 0) {
+        draftZones.forEach((zone, index) => {
+          const feature = {
+            type: "Feature" as const,
+            properties: {},
+            geometry: zone.geometry,
+          };
+          const ids = draw.add(feature);
+          const drawId = String(Array.isArray(ids) ? ids[0] : ids);
+          zoneMetaRef.current.set(drawId, { ...zone, drawId, name: zone.name || `Zone ${index + 1}` });
+        });
+        syncZonesFromDraw();
+        draw.changeMode("simple_select");
+      } else if (draw.getAll().features.length === 0) {
+        draw.changeMode("draw_polygon");
+      }
+
+      map.on("draw.create", onCreate);
+      map.on("draw.update", onUpdate);
+      map.on("draw.delete", onDelete);
+      map.on("draw.selectionchange", onSelectionChange);
     } else {
       if (map.hasControl(draw as unknown as mapboxgl.IControl)) {
         map.removeControl(draw);
@@ -240,11 +266,68 @@ export function MapEditor({
     }
 
     return () => {
-      map.off("draw.create", handleDrawUpdate);
-      map.off("draw.update", handleDrawUpdate);
-      map.off("draw.delete", handleDrawUpdate);
+      map.off("draw.create", onCreate);
+      map.off("draw.update", onUpdate);
+      map.off("draw.delete", onDelete);
+      map.off("draw.selectionchange", onSelectionChange);
     };
-  }, [mode, handleDrawUpdate]);
+  }, [mode, syncZonesFromDraw, onZoneSelect]);
+
+  useEffect(() => {
+    const draw = drawRef.current;
+    if (!draw || mode !== "zones" || drawTrigger === 0) return;
+    draw.changeMode("draw_polygon");
+  }, [drawTrigger, mode]);
+
+  // Non-zones modes: show zones on display layer
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mode === "zones") return;
+
+    const update = () => {
+      const displayZones = zones as Zone[];
+      if (!map.getSource("zones-display")) return;
+
+      if (!map.getLayer("zones-display-fill")) {
+        map.addLayer({
+          id: "zones-display-fill",
+          type: "fill",
+          source: "zones-display",
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": ["case", ["get", "selected"], 0.55, 0.35],
+          },
+        });
+        map.addLayer({
+          id: "zones-display-outline",
+          type: "line",
+          source: "zones-display",
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": ["case", ["get", "selected"], 3, 1.5],
+          },
+        });
+      }
+
+      (map.getSource("zones-display") as mapboxgl.GeoJSONSource).setData(
+        zonesToGeoJson(displayZones, selectedZoneId)
+      );
+
+      const equipmentSource = map.getSource("equipment") as mapboxgl.GeoJSONSource | undefined;
+      equipmentSource?.setData(
+        pointsToGeoJson(
+          [
+            ...valves.map((v) => ({ ...v, kind: "valve" as const })),
+            ...controllers.map((c) => ({ ...c, kind: "controller" as const })),
+          ],
+          selectedPointId
+        )
+      );
+    };
+
+    if (map.isStyleLoaded()) update();
+    else map.once("load", update);
+  }, [mode, zones, valves, controllers, selectedZoneId, selectedPointId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -276,26 +359,7 @@ export function MapEditor({
     };
   }, [mode, valves.length, controllers.length, onValvePlaced, onControllerPlaced]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !onZoneSelect) return;
-
-    const handleClick = (e: mapboxgl.MapMouseEvent) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: ["zones-fill"] });
-      if (features.length > 0 && features[0].id) {
-        onZoneSelect(String(features[0].id));
-      } else {
-        onZoneSelect(null);
-      }
-    };
-
-    map.on("click", handleClick);
-    return () => {
-      map.off("click", handleClick);
-    };
-  }, [onZoneSelect]);
-
   return <div ref={containerRef} className={className} />;
 }
 
-export { getZoneColor };
+export { getZoneColor, zoneKey };

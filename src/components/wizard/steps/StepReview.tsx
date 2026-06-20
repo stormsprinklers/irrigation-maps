@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { publishProperty } from "@/lib/actions/properties";
 import { calculatePropertyTotalGpm, getGpmWarnings } from "@/lib/calculations/gpm";
-import { formatRuntime } from "@/lib/calculations/runtime";
+import { formatRuntime, calculatePropertyStartTimes } from "@/lib/calculations/runtime";
 import {
   calculatePropertyMonthlyGallons,
   calculateZoneWaterUsage,
@@ -47,6 +47,7 @@ export function StepReview({ property }: StepReviewProps) {
     .map((z) => calculateZoneWaterUsage(z))
     .filter((u): u is NonNullable<typeof u> => u != null);
   const monthlyTotal = calculatePropertyMonthlyGallons(usages);
+  const zoneStartTimes = calculatePropertyStartTimes(property.zones);
 
   function handlePublish() {
     startTransition(async () => {
@@ -110,10 +111,15 @@ export function StepReview({ property }: StepReviewProps) {
             <TableHead>Type</TableHead>
             <TableHead className="text-right">GPM</TableHead>
             <TableHead className="text-right">Runtime</TableHead>
+            <TableHead className="text-right">Days/wk</TableHead>
+            <TableHead className="text-right">Start</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {property.zones.map((zone) => (
+          {property.zones.map((zone) => {
+            const usage = usages.find((u) => u.zoneId === zone.id);
+            const timing = zoneStartTimes.get(zone.id);
+            return (
             <TableRow key={zone.id}>
               <TableCell className="font-medium">{zone.name}</TableCell>
               <TableCell>{labelForEnum(zone.vegetation_type)}</TableCell>
@@ -125,8 +131,11 @@ export function StepReview({ property }: StepReviewProps) {
                   ? formatRuntime(zone.base_runtime_minutes)
                   : "—"}
               </TableCell>
+              <TableCell className="text-right">{usage?.daysPerWeek ?? "—"}</TableCell>
+              <TableCell className="text-right">{timing?.startTime ?? "—"}</TableCell>
             </TableRow>
-          ))}
+          );
+          })}
         </TableBody>
       </Table>
 

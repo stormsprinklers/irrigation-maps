@@ -9,15 +9,16 @@ import type {
   Controller,
   GeoJsonPoint,
   GeoJsonPolygon,
+  IrrigationType,
   Property,
   PropertyWithRelations,
   ShadeLevel,
+  SlopeLevel,
   SoilType,
   VegetationType,
   Zone,
 } from "@/types/database";
 import type {
-  ConditionsStepData,
   EquipmentStepData,
   IrrigationStepData,
   PropertyStepData,
@@ -164,6 +165,11 @@ export async function saveZonesStep(propertyId: string, data: ZonesStepData) {
     property_id: propertyId,
     name: zone.name,
     geometry: zone.geometry as GeoJsonPolygon,
+    vegetation_type: zone.vegetation_type,
+    shade_level: zone.shade_level,
+    slope_level: zone.slope_level,
+    soil_type: zone.soil_type,
+    irrigation_type: zone.irrigation_type,
     sort_order: index,
   }));
 
@@ -174,32 +180,12 @@ export async function saveZonesStep(propertyId: string, data: ZonesStepData) {
   revalidatePath(`/properties/${propertyId}/edit`);
 }
 
-export async function saveConditionsStep(propertyId: string, data: ConditionsStepData) {
-  const { supabase } = await requireUser();
-
-  for (const zone of data.zones) {
-    const { error } = await supabase
-      .from("zones")
-      .update({
-        vegetation_type: zone.vegetation_type,
-        shade_level: zone.shade_level,
-        soil_type: zone.soil_type,
-      })
-      .eq("id", zone.id);
-
-    if (error) throw new Error(error.message);
-  }
-
-  await supabase.from("properties").update({ wizard_step: 4 }).eq("id", propertyId);
-  revalidatePath(`/properties/${propertyId}/edit`);
-}
-
 export async function saveIrrigationStep(propertyId: string, data: IrrigationStepData) {
   const { supabase } = await requireUser();
 
   const { data: existingZones } = await supabase
     .from("zones")
-    .select("id, vegetation_type, shade_level, soil_type")
+    .select("id, vegetation_type, shade_level, slope_level, soil_type, irrigation_type")
     .eq("property_id", propertyId);
 
   const zoneMap = new Map((existingZones ?? []).map((z) => [z.id, z]));
@@ -207,25 +193,27 @@ export async function saveIrrigationStep(propertyId: string, data: IrrigationSte
   for (const zone of data.zones) {
     const existing = zoneMap.get(zone.id);
     const estimatedGpm = calculateZoneGpm(zone.nozzle_count, zone.nozzle_gpm);
+    const irrigationType = zone.irrigation_type ?? existing?.irrigation_type;
 
     let baseRuntime = 12;
     if (
       existing?.vegetation_type &&
       existing?.shade_level &&
-      existing?.soil_type
+      existing?.soil_type &&
+      irrigationType
     ) {
       baseRuntime = calculateBaseRuntime(
         existing.vegetation_type as VegetationType,
-        zone.irrigation_type,
+        irrigationType as IrrigationType,
         existing.shade_level as ShadeLevel,
-        existing.soil_type as SoilType
+        existing.soil_type as SoilType,
+        (existing.slope_level as SlopeLevel) ?? "flat"
       );
     }
 
     const { error } = await supabase
       .from("zones")
       .update({
-        irrigation_type: zone.irrigation_type,
         nozzle_count: zone.nozzle_count,
         nozzle_gpm: zone.nozzle_gpm,
         estimated_gpm: estimatedGpm,
@@ -236,7 +224,7 @@ export async function saveIrrigationStep(propertyId: string, data: IrrigationSte
     if (error) throw new Error(error.message);
   }
 
-  await supabase.from("properties").update({ wizard_step: 5 }).eq("id", propertyId);
+  await supabase.from("properties").update({ wizard_step: 4 }).eq("id", propertyId);
   revalidatePath(`/properties/${propertyId}/edit`);
 }
 
@@ -290,7 +278,7 @@ export async function saveEquipmentStep(propertyId: string, data: EquipmentStepD
     }
   }
 
-  await supabase.from("properties").update({ wizard_step: 6 }).eq("id", propertyId);
+  await supabase.from("properties").update({ wizard_step: 5 }).eq("id", propertyId);
   revalidatePath(`/properties/${propertyId}/edit`);
 }
 
@@ -304,7 +292,7 @@ export async function publishProperty(propertyId: string) {
       status: "published",
       is_public: true,
       share_slug: slug,
-      wizard_step: 6,
+      wizard_step: 5,
     })
     .eq("id", propertyId);
 

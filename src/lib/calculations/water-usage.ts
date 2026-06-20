@@ -1,13 +1,11 @@
 import type { VegetationType } from "@/types/database";
+import { calculateDaysPerWeek } from "@/lib/calculations/schedule";
+import type { ShadeLevel, SoilType } from "@/types/database";
 
-const CYCLES_PER_WEEK: Record<VegetationType, number> = {
-  turf: 3,
-  shrubs: 2,
-  trees: 1,
-  groundcover: 2,
-  mixed: 2.5,
-};
-
+/**
+ * Gallons per cycle = GPM × runtime (minutes).
+ * GPM is gallons per minute; multiplying by minutes yields gallons.
+ */
 export function calculateGallonsPerCycle(gpm: number, runtimeMinutes: number): number {
   return Math.round(gpm * runtimeMinutes);
 }
@@ -15,10 +13,10 @@ export function calculateGallonsPerCycle(gpm: number, runtimeMinutes: number): n
 export function calculateWeeklyGallons(
   gpm: number,
   runtimeMinutes: number,
-  vegetationType: VegetationType
+  daysPerWeek: number
 ): number {
   const perCycle = calculateGallonsPerCycle(gpm, runtimeMinutes);
-  return Math.round(perCycle * CYCLES_PER_WEEK[vegetationType]);
+  return Math.round(perCycle * daysPerWeek);
 }
 
 export function calculateMonthlyGallons(weeklyGallons: number): number {
@@ -38,6 +36,7 @@ export type ZoneWaterUsage = {
   gallonsPerCycle: number;
   weeklyGallons: number;
   monthlyGallons: number;
+  daysPerWeek: number;
 };
 
 export function calculateZoneWaterUsage(
@@ -47,6 +46,8 @@ export function calculateZoneWaterUsage(
     estimated_gpm: number | null;
     base_runtime_minutes: number | null;
     vegetation_type: VegetationType | null;
+    shade_level?: ShadeLevel | null;
+    soil_type?: SoilType | null;
   },
   adjustedRuntime?: number
 ): ZoneWaterUsage | null {
@@ -55,12 +56,13 @@ export function calculateZoneWaterUsage(
   }
 
   const runtime = adjustedRuntime ?? zone.base_runtime_minutes;
-  const gallonsPerCycle = calculateGallonsPerCycle(zone.estimated_gpm, runtime);
-  const weeklyGallons = calculateWeeklyGallons(
-    zone.estimated_gpm,
-    runtime,
-    zone.vegetation_type
+  const daysPerWeek = calculateDaysPerWeek(
+    zone.vegetation_type,
+    zone.shade_level ?? "full_sun",
+    zone.soil_type ?? "loam"
   );
+  const gallonsPerCycle = calculateGallonsPerCycle(zone.estimated_gpm, runtime);
+  const weeklyGallons = calculateWeeklyGallons(zone.estimated_gpm, runtime, daysPerWeek);
 
   return {
     zoneId: zone.id,
@@ -68,6 +70,7 @@ export function calculateZoneWaterUsage(
     gallonsPerCycle,
     weeklyGallons,
     monthlyGallons: calculateMonthlyGallons(weeklyGallons),
+    daysPerWeek,
   };
 }
 

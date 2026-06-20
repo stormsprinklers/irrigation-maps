@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPropertyBySlug } from "@/lib/actions/properties";
-import { PublicHeader } from "@/components/layout/header";
+import { StormSprinklersHeader, StormSprinklersFooter } from "@/components/layout/storm-sprinklers-branding";
 import { ShareView } from "@/components/share/ShareView";
 
 export default async function SharePage({
@@ -14,9 +14,10 @@ export default async function SharePage({
   if (!property) notFound();
 
   return (
-    <>
-      <PublicHeader companyName={property.profile?.company_name} />
+    <div className="flex min-h-screen flex-col">
+      <StormSprinklersHeader />
       <ShareView property={property} />
-    </>
+      <StormSprinklersFooter />
+    </div>
   );
 }

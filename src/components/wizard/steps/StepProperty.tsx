@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Image from "next/image";
-import { Loader2, Sparkles } from "lucide-react";
 import { AreaSelectorMap } from "@/components/map/AreaSelectorMap";
+import { useBackgroundImageGeneration } from "@/components/wizard/BackgroundImageGeneration";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { geocodeAddress, type GeocodingResult } from "@/lib/mapbox/geocoding";
 import { savePropertyStep } from "@/lib/actions/properties";
-import { generateStylizedPropertyImage } from "@/lib/actions/stylize-image";
 import type { MapBounds, Property } from "@/types/database";
 
 type StepPropertyProps = {
@@ -18,6 +16,7 @@ type StepPropertyProps = {
 };
 
 export function StepProperty({ property, onComplete }: StepPropertyProps) {
+  const { scheduleImageGeneration } = useBackgroundImageGeneration();
   const [query, setQuery] = useState(
     property.address === "Untitled Property" ? "" : property.address
   );
@@ -37,12 +36,8 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
       : null
   );
   const [areaBounds, setAreaBounds] = useState<MapBounds | null>(property.map_bounds);
-  const [stylizedImageUrl, setStylizedImageUrl] = useState<string | null>(
-    property.stylized_image_url
-  );
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startSaveTransition] = useTransition();
-  const [isGenerating, startGenerateTransition] = useTransition();
 
   async function handleSearch() {
     setError(null);
@@ -55,21 +50,9 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
     }
   }
 
-  function handleGenerate() {
-    if (!areaBounds) {
-      setError("Select a property area on the map first.");
-      return;
-    }
-
-    setError(null);
-    startGenerateTransition(async () => {
-      try {
-        const result = await generateStylizedPropertyImage(property.id, areaBounds);
-        setStylizedImageUrl(result.stylizedImageUrl);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to generate image");
-      }
-    });
+  function handleBoundsChange(bounds: MapBounds | null) {
+    setAreaBounds(bounds);
+    if (bounds) scheduleImageGeneration(bounds);
   }
 
   function handleSave() {
@@ -79,10 +62,6 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
     }
     if (!areaBounds) {
       setError("Drag on the map to select the property area.");
-      return;
-    }
-    if (!stylizedImageUrl) {
-      setError("Generate the presentation image before continuing.");
       return;
     }
 
@@ -98,6 +77,7 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
           longitude: centerLng,
           map_bounds: areaBounds,
         });
+        scheduleImageGeneration(areaBounds);
         onComplete();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save");
@@ -145,7 +125,6 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
                     onClick={() => {
                       setSelected(r);
                       setAreaBounds(null);
-                      setStylizedImageUrl(null);
                     }}
                   >
                     {r.address}
@@ -155,45 +134,10 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
             </ul>
           )}
 
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <h3 className="mb-2 text-sm font-medium">Presentation image</h3>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Select the property area on the map, then generate a polished aerial rendering with
-              OpenAI.
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleGenerate}
-              disabled={!areaBounds || isGenerating}
-              className="w-full"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate presentation image
-                </>
-              )}
-            </Button>
-          </div>
-
-          {stylizedImageUrl && (
-            <div className="overflow-hidden rounded-lg border">
-              <Image
-                src={stylizedImageUrl}
-                alt="Stylized property aerial"
-                width={512}
-                height={512}
-                className="h-auto w-full"
-                unoptimized
-              />
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            After you drag a box around the property, a polished presentation image starts
+            generating automatically while you continue to the next step.
+          </p>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
@@ -201,15 +145,12 @@ export function StepProperty({ property, onComplete }: StepPropertyProps) {
         <AreaSelectorMap
           center={selected ? [selected.longitude, selected.latitude] : undefined}
           initialBounds={areaBounds}
-          onBoundsChange={(bounds) => {
-            setAreaBounds(bounds);
-            if (bounds) setStylizedImageUrl(null);
-          }}
+          onBoundsChange={handleBoundsChange}
         />
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!selected || !areaBounds || !stylizedImageUrl || isSaving}>
+        <Button onClick={handleSave} disabled={!selected || !areaBounds || isSaving}>
           {isSaving ? "Saving..." : "Save & Continue"}
         </Button>
       </div>

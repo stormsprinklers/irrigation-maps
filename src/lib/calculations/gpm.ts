@@ -1,8 +1,22 @@
 import type { IrrigationType } from "@/types/database";
+import {
+  getDefaultGpmPerHead,
+  gphToGpm,
+  gpmToGph,
+} from "@/lib/calculations/manufacturer-data";
 import { IRRIGATION_TYPES, VALVE_CAPACITY_GPM } from "@/lib/constants";
 
 export function getDefaultNozzleGpm(irrigationType: IrrigationType): number {
-  return IRRIGATION_TYPES.find((t) => t.value === irrigationType)?.defaultGpm ?? 1.5;
+  return getDefaultGpmPerHead(irrigationType);
+}
+
+export function getDefaultNozzleLabel(irrigationType: IrrigationType): string {
+  if (irrigationType === "drip") {
+    const gpm = getDefaultGpmPerHead("drip");
+    return `${gpm} GPM (${gpmToGph(gpm)} GPH per emitter)`;
+  }
+  const spec = IRRIGATION_TYPES.find((t) => t.value === irrigationType);
+  return `${getDefaultGpmPerHead(irrigationType)} GPM (${spec?.label ?? irrigationType} typical)`;
 }
 
 export function calculateZoneGpm(nozzleCount: number, nozzleGpm: number): number {
@@ -34,3 +48,5 @@ export function getGpmWarnings(
       message: `Zone exceeds typical valve capacity (${VALVE_CAPACITY_GPM} GPM)`,
     }));
 }
+
+export { gphToGpm, gpmToGph };

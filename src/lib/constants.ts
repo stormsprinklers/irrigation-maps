@@ -1,51 +1,73 @@
-import type { IrrigationType, ShadeLevel, SoilType, VegetationType } from "@/types/database";
+import type {
+  IrrigationType,
+  ShadeLevel,
+  SlopeLevel,
+  SoilType,
+  VegetationType,
+} from "@/types/database";
+import { getDefaultGpmPerHead } from "@/lib/calculations/manufacturer-data";
 
 export const VEGETATION_TYPES: { value: VegetationType; label: string }[] = [
-  { value: "turf", label: "Turf / Lawn" },
+  { value: "grass", label: "Grass" },
   { value: "shrubs", label: "Shrubs" },
   { value: "trees", label: "Trees" },
-  { value: "groundcover", label: "Ground Cover" },
-  { value: "mixed", label: "Mixed Plantings" },
+  { value: "flower_bed", label: "Flower Bed" },
 ];
 
 export const SHADE_LEVELS: { value: ShadeLevel; label: string }[] = [
   { value: "full_sun", label: "Full Sun" },
-  { value: "partial_shade", label: "Partial Shade" },
-  { value: "full_shade", label: "Full Shade" },
+  { value: "some_shade", label: "Some Shade" },
+  { value: "lots_of_shade", label: "Lots of Shade" },
+];
+
+export const SLOPE_LEVELS: { value: SlopeLevel; label: string }[] = [
+  { value: "flat", label: "Flat" },
+  { value: "moderate", label: "Moderate" },
+  { value: "steep", label: "Steep" },
 ];
 
 export const SOIL_TYPES: { value: SoilType; label: string }[] = [
+  { value: "sand", label: "Sand" },
   { value: "clay", label: "Clay" },
   { value: "loam", label: "Loam" },
-  { value: "sand", label: "Sand" },
-  { value: "rocky", label: "Rocky" },
 ];
 
-export const IRRIGATION_TYPES: { value: IrrigationType; label: string; defaultGpm: number }[] = [
-  { value: "spray", label: "Spray Heads", defaultGpm: 1.5 },
-  { value: "rotor", label: "Rotors", defaultGpm: 2.5 },
-  { value: "rotary_nozzle", label: "Rotary Nozzles", defaultGpm: 0.6 },
-  { value: "drip", label: "Drip", defaultGpm: 0.5 },
-  { value: "bubbler", label: "Bubblers", defaultGpm: 0.25 },
+export const IRRIGATION_TYPES: {
+  value: IrrigationType;
+  label: string;
+  defaultGpm: number;
+  precipInHr: number;
+}[] = [
+  { value: "spray", label: "Spray", defaultGpm: getDefaultGpmPerHead("spray"), precipInHr: 1.58 },
+  { value: "rotary", label: "Rotary", defaultGpm: getDefaultGpmPerHead("rotary"), precipInHr: 0.43 },
+  { value: "rotor", label: "Rotor", defaultGpm: getDefaultGpmPerHead("rotor"), precipInHr: 0.4 },
+  { value: "drip", label: "Drip Emitter", defaultGpm: getDefaultGpmPerHead("drip"), precipInHr: 0.43 },
+  { value: "bubbler", label: "Bubbler", defaultGpm: getDefaultGpmPerHead("bubbler"), precipInHr: 0.2 },
 ];
 
 export const WIZARD_STEPS = [
-  { step: 1, title: "Property", description: "Locate the property on the map" },
-  { step: 2, title: "Zones", description: "Draw irrigation zones" },
-  { step: 3, title: "Conditions", description: "Vegetation, shade, and soil" },
-  { step: 4, title: "Irrigation", description: "Head types and flow rates" },
-  { step: 5, title: "Equipment", description: "Valves and controllers" },
-  { step: 6, title: "Review", description: "Publish and share" },
+  { step: 1, title: "Property", description: "Locate the property and create a presentation image" },
+  { step: 2, title: "Zones", description: "Draw zones and label conditions for each" },
+  { step: 3, title: "Irrigation", description: "Nozzle counts and flow rates" },
+  { step: 4, title: "Equipment", description: "Valves and controllers" },
+  { step: 5, title: "Review", description: "Publish and share with your customer" },
 ] as const;
 
 export const VALVE_CAPACITY_GPM = 18;
 
 export const VEGETATION_COLORS: Record<VegetationType, string> = {
-  turf: "#22c55e",
+  grass: "#22c55e",
   shrubs: "#84cc16",
   trees: "#15803d",
-  groundcover: "#a3e635",
-  mixed: "#eab308",
+  flower_bed: "#ec4899",
 };
 
-export const DEFAULT_MAP_CENTER: [number, number] = [-98.5795, 39.8283];
+export const DEFAULT_MAP_CENTER: [number, number] = [-111.891, 40.3916];
+
+export const DEFAULT_ZONE_ATTRIBUTES = {
+  vegetation_type: "grass" as VegetationType,
+  shade_level: "full_sun" as ShadeLevel,
+  slope_level: "flat" as SlopeLevel,
+  soil_type: "loam" as SoilType,
+  irrigation_type: "spray" as IrrigationType,
+};

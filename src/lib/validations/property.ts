@@ -5,36 +5,32 @@ export const propertyStepSchema = z.object({
   customer_name: z.string().optional(),
   latitude: z.number(),
   longitude: z.number(),
-  map_bounds: z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])]).optional(),
+  map_bounds: z
+    .tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])])
+    .optional(),
 });
 
-export const zoneGeometrySchema = z.object({
+export const zoneWithAttributesSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Zone name is required"),
   geometry: z.object({
     type: z.literal("Polygon"),
     coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))),
   }),
+  vegetation_type: z.enum(["grass", "shrubs", "trees", "flower_bed"]),
+  shade_level: z.enum(["full_sun", "some_shade", "lots_of_shade"]),
+  slope_level: z.enum(["flat", "moderate", "steep"]),
+  soil_type: z.enum(["sand", "clay", "loam"]),
+  irrigation_type: z.enum(["spray", "rotary", "rotor", "drip", "bubbler"]),
 });
 
 export const zonesStepSchema = z.object({
-  zones: z.array(zoneGeometrySchema).min(1, "Draw at least one zone"),
-});
-
-export const zoneConditionsSchema = z.object({
-  id: z.string(),
-  vegetation_type: z.enum(["turf", "shrubs", "trees", "groundcover", "mixed"]),
-  shade_level: z.enum(["full_sun", "partial_shade", "full_shade"]),
-  soil_type: z.enum(["clay", "loam", "sand", "rocky"]),
-});
-
-export const conditionsStepSchema = z.object({
-  zones: z.array(zoneConditionsSchema),
+  zones: z.array(zoneWithAttributesSchema).min(1, "Draw at least one zone"),
 });
 
 export const zoneIrrigationSchema = z.object({
   id: z.string(),
-  irrigation_type: z.enum(["spray", "rotor", "rotary_nozzle", "drip", "bubbler"]),
+  irrigation_type: z.enum(["spray", "rotary", "rotor", "drip", "bubbler"]),
   nozzle_count: z.number().int().min(1),
   nozzle_gpm: z.number().positive(),
 });
@@ -76,6 +72,5 @@ export const equipmentStepSchema = z.object({
 
 export type PropertyStepData = z.infer<typeof propertyStepSchema>;
 export type ZonesStepData = z.infer<typeof zonesStepSchema>;
-export type ConditionsStepData = z.infer<typeof conditionsStepSchema>;
 export type IrrigationStepData = z.infer<typeof irrigationStepSchema>;
 export type EquipmentStepData = z.infer<typeof equipmentStepSchema>;

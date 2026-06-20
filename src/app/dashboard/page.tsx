@@ -16,12 +16,37 @@ import { CreatePropertyButton } from "@/components/dashboard/create-property-but
 import { PropertyActions } from "@/components/dashboard/property-actions";
 
 export default async function DashboardPage() {
-  const properties = await getDashboardProperties();
+  let properties: Awaited<ReturnType<typeof getDashboardProperties>> = [];
+  let setupError: string | null = null;
+
+  try {
+    properties = await getDashboardProperties();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to load properties";
+    if (message.includes("properties") && message.includes("schema cache")) {
+      setupError =
+        "Database tables are missing. Run supabase/setup.sql in your Supabase SQL Editor, then refresh this page.";
+    } else {
+      throw e;
+    }
+  }
 
   return (
     <>
       <AppHeader />
       <main className="mx-auto max-w-5xl px-4 py-8">
+        {setupError && (
+          <Card className="mb-6 border-destructive/50 bg-destructive/5">
+            <CardHeader>
+              <CardTitle className="text-base">Database setup required</CardTitle>
+              <CardDescription>{setupError}</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Supabase → SQL Editor → paste the contents of{" "}
+              <code className="rounded bg-muted px-1">supabase/setup.sql</code> → Run
+            </CardContent>
+          </Card>
+        )}
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Your Properties</h1>
@@ -59,7 +84,7 @@ export default async function DashboardPage() {
                     <Badge variant={property.status === "published" ? "default" : "secondary"}>
                       {property.status === "published" ? "Published" : "Draft"}
                     </Badge>
-                    <Badge variant="outline">Step {property.wizard_step}/6</Badge>
+                    <Badge variant="outline">Step {property.wizard_step}/5</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center gap-2">

@@ -6,7 +6,9 @@ import { MapViewer } from "@/components/map/MapViewer";
 import { labelForEnum } from "@/components/map/zone-layer";
 import {
   calculateAdjustedRuntime,
+  calculatePropertyStartTimes,
   formatRuntime,
+  getRuntimeBreakdown,
 } from "@/lib/calculations/runtime";
 import {
   calculatePropertyMonthlyGallons,
@@ -47,6 +49,8 @@ export function ShareView({ property }: ShareViewProps) {
     property.zones.map((z) => z.estimated_gpm ?? 0)
   );
 
+  const zoneStartTimes = calculatePropertyStartTimes(property.zones, { temperatureF: temperature });
+
   const zoneUsages = property.zones.map((zone) => {
     const adjustedRuntime = zone.base_runtime_minutes
       ? calculateAdjustedRuntime(zone.base_runtime_minutes, temperature)
@@ -70,6 +74,18 @@ export function ShareView({ property }: ShareViewProps) {
   }
 
   const selectedZone = property.zones.find((z) => z.id === selectedZoneId);
+  const selectedTiming = selectedZoneId ? zoneStartTimes.get(selectedZoneId) : null;
+  const selectedBreakdown =
+    selectedZone?.vegetation_type && selectedZone.irrigation_type
+      ? getRuntimeBreakdown(
+          selectedZone.vegetation_type,
+          selectedZone.irrigation_type,
+          selectedZone.shade_level ?? "full_sun",
+          selectedZone.soil_type ?? "loam",
+          selectedZone.slope_level ?? "flat",
+          temperature
+        )
+      : null;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8">
@@ -168,22 +184,65 @@ export function ShareView({ property }: ShareViewProps) {
                   <span>{labelForEnum(selectedZone.shade_level)}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Slope</span>
+                  <span>{labelForEnum(selectedZone.slope_level)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Soil</span>
+                  <span>{labelForEnum(selectedZone.soil_type)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sprinkler type</span>
+                  <span>{labelForEnum(selectedZone.irrigation_type)}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">GPM</span>
                   <span>{selectedZone.estimated_gpm ?? "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Suggested runtime</span>
                   <span>
-                    {selectedZone.base_runtime_minutes
-                      ? formatRuntime(
-                          calculateAdjustedRuntime(
-                            selectedZone.base_runtime_minutes,
-                            temperature
-                          )
-                        )
+                    {selectedBreakdown
+                      ? formatRuntime(selectedBreakdown.adjustedRuntimeMinutes)
                       : "—"}
                   </span>
                 </div>
+                {selectedBreakdown && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Days per week</span>
+                      <span>{selectedBreakdown.daysLabel}</span>
+                    </div>
+                    {selectedTiming && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Start time</span>
+                          <span>{selectedTiming.startTime}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Finish time</span>
+                          <span>{selectedTiming.finishTime}</span>
+                        </div>
+                      </>
+                    )}
+                    {selectedBreakdown.cycleSoak.enabled && (
+                      <div className="rounded-md bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
+                        Cycle-soak: {selectedBreakdown.cycleSoak.description}
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Target depth / cycle</span>
+                      <span>{selectedBreakdown.targetDepthInches}"</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Precip rate</span>
+                      <span>{selectedBreakdown.precipRateInHr} in/hr</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedBreakdown.wateringWindowNote}
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
@@ -204,14 +263,19 @@ export function ShareView({ property }: ShareViewProps) {
                 <TableHead>Zone</TableHead>
                 <TableHead>Vegetation</TableHead>
                 <TableHead>Shade</TableHead>
+                <TableHead>Slope</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">GPM</TableHead>
                 <TableHead className="text-right">Runtime</TableHead>
+                <TableHead className="text-right">Days/wk</TableHead>
+                <TableHead className="text-right">Start</TableHead>
                 <TableHead className="text-right">Monthly</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {zoneUsages.map(({ zone, usage, adjustedRuntime }) => (
+              {zoneUsages.map(({ zone, usage, adjustedRuntime }) => {
+                const timing = zoneStartTimes.get(zone.id);
+                return (
                 <TableRow
                   key={zone.id}
                   className={selectedZoneId === zone.id ? "bg-muted/50" : "cursor-pointer"}
@@ -220,16 +284,20 @@ export function ShareView({ property }: ShareViewProps) {
                   <TableCell className="font-medium">{zone.name}</TableCell>
                   <TableCell>{labelForEnum(zone.vegetation_type)}</TableCell>
                   <TableCell>{labelForEnum(zone.shade_level)}</TableCell>
+                  <TableCell>{labelForEnum(zone.slope_level)}</TableCell>
                   <TableCell>{labelForEnum(zone.irrigation_type)}</TableCell>
                   <TableCell className="text-right">{zone.estimated_gpm ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {adjustedRuntime ? formatRuntime(adjustedRuntime) : "—"}
                   </TableCell>
+                  <TableCell className="text-right">{usage?.daysPerWeek ?? "—"}</TableCell>
+                  <TableCell className="text-right">{timing?.startTime ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {usage ? formatGallons(usage.monthlyGallons) : "—"}
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </CardContent>

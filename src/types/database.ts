@@ -1,7 +1,8 @@
-export type VegetationType = "turf" | "shrubs" | "trees" | "groundcover" | "mixed";
-export type ShadeLevel = "full_sun" | "partial_shade" | "full_shade";
-export type SoilType = "clay" | "loam" | "sand" | "rocky";
-export type IrrigationType = "spray" | "rotor" | "rotary_nozzle" | "drip" | "bubbler";
+export type VegetationType = "grass" | "shrubs" | "trees" | "flower_bed";
+export type ShadeLevel = "full_sun" | "some_shade" | "lots_of_shade";
+export type SlopeLevel = "flat" | "moderate" | "steep";
+export type SoilType = "sand" | "clay" | "loam";
+export type IrrigationType = "spray" | "rotary" | "rotor" | "drip" | "bubbler";
 export type PropertyStatus = "draft" | "published" | "archived";
 
 export type GeoJsonPoint = {
@@ -50,6 +51,7 @@ export type Zone = {
   geometry: GeoJsonPolygon;
   vegetation_type: VegetationType | null;
   shade_level: ShadeLevel | null;
+  slope_level: SlopeLevel | null;
   soil_type: SoilType | null;
   irrigation_type: IrrigationType | null;
   nozzle_count: number | null;

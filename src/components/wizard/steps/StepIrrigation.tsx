@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { saveIrrigationStep } from "@/lib/actions/properties";
 import { IRRIGATION_TYPES } from "@/lib/constants";
-import { calculateZoneGpm } from "@/lib/calculations/gpm";
+import { calculateZoneGpm, getDefaultNozzleLabel } from "@/lib/calculations/gpm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,7 @@ export function StepIrrigation({ propertyId, zones, onComplete }: StepIrrigation
     zones.map((z) => {
       const defaultType = z.irrigation_type ?? "spray";
       const defaultGpm =
-        IRRIGATION_TYPES.find((t) => t.value === defaultType)?.defaultGpm ?? 1.5;
+        IRRIGATION_TYPES.find((t) => t.value === defaultType)?.defaultGpm ?? 1.85;
       return {
         id: z.id,
         name: z.name,
@@ -80,6 +80,9 @@ export function StepIrrigation({ propertyId, zones, onComplete }: StepIrrigation
     <div className="space-y-6">
       {zoneData.map((zone) => {
         const gpm = calculateZoneGpm(zone.nozzle_count, zone.nozzle_gpm);
+        const typeSpec = IRRIGATION_TYPES.find((t) => t.value === zone.irrigation_type);
+        const flowLabel =
+          zone.irrigation_type === "drip" ? "GPM per emitter" : "GPM per head";
         return (
           <div key={zone.id} className="rounded-lg border p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -117,16 +120,20 @@ export function StepIrrigation({ propertyId, zones, onComplete }: StepIrrigation
                 />
               </div>
               <div className="space-y-2">
-                <Label>GPM per nozzle</Label>
+                <Label>{flowLabel}</Label>
                 <Input
                   type="number"
-                  min={0.1}
-                  step={0.1}
+                  min={zone.irrigation_type === "drip" ? 0.001 : 0.1}
+                  step={zone.irrigation_type === "drip" ? 0.001 : 0.1}
                   value={zone.nozzle_gpm}
                   onChange={(e) =>
                     updateZone(zone.id, "nozzle_gpm", parseFloat(e.target.value) || 0.1)
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Typical: {getDefaultNozzleLabel(zone.irrigation_type)}
+                  {typeSpec ? ` · ${typeSpec.precipInHr} in/hr precip` : ""}
+                </p>
               </div>
             </div>
           </div>
