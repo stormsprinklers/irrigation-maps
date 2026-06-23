@@ -3,6 +3,12 @@
 import { useState, useTransition } from "react";
 import { MapEditor, type DraftController, type DraftValve } from "@/components/map/MapEditor";
 import { saveEquipmentStep } from "@/lib/actions/properties";
+import {
+  CONTROLLER_MANUFACTURERS,
+  getControllerModel,
+  getModelsForManufacturer,
+  type ControllerManufacturerId,
+} from "@/lib/controllers/catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +33,13 @@ type StepEquipmentProps = {
 type ControllerDraft = DraftController & {
   station_count: number;
   stations: { station_number: number; zone_id: string }[];
+  controller_model_id: string | null;
 };
+
+function manufacturerForModel(modelId: string | null): ControllerManufacturerId | null {
+  if (!modelId) return null;
+  return getControllerModel(modelId)?.manufacturerId ?? null;
+}
 
 export function StepEquipment({
   property,
@@ -51,11 +63,18 @@ export function StepEquipment({
       geometry: c.geometry,
       station_count: c.station_count,
       stations: c.zone_stations,
+      controller_model_id: c.controller_model_id ?? null,
     }))
   );
   const [mapMode, setMapMode] = useState<"valves" | "controllers">("valves");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function updateController(index: number, patch: Partial<ControllerDraft>) {
+    setControllers((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, ...patch } : c))
+    );
+  }
 
   function handleSave() {
     startTransition(async () => {
@@ -82,7 +101,8 @@ export function StepEquipment({
         </TabsContent>
         <TabsContent value="controllers" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Click the map to place controllers, then assign station numbers to zones.
+            Click the map to place controllers, select the manufacturer and model, then assign
+            station numbers to zones.
           </p>
         </TabsContent>
       </Tabs>
@@ -102,7 +122,7 @@ export function StepEquipment({
         onControllerPlaced={(c) =>
           setControllers((prev) => [
             ...prev,
-            { ...c, station_count: 8, stations: [] },
+            { ...c, station_count: 8, stations: [], controller_model_id: null },
           ])
         }
         className="h-[350px] w-full rounded-lg"
@@ -152,81 +172,130 @@ export function StepEquipment({
 
       {mapMode === "controllers" && controllers.length > 0 && (
         <div className="space-y-3">
-          {controllers.map((controller, cIndex) => (
-            <div key={cIndex} className="rounded-lg border p-3">
-              <div className="mb-3 grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Controller label</Label>
-                  <Input
-                    value={controller.label}
-                    onChange={(e) => {
-                      const updated = [...controllers];
-                      updated[cIndex] = { ...controller, label: e.target.value };
-                      setControllers(updated);
-                    }}
-                  />
+          {controllers.map((controller, cIndex) => {
+            const selectedManufacturer =
+              manufacturerForModel(controller.controller_model_id) ?? undefined;
+            const modelsForManufacturer = selectedManufacturer
+              ? getModelsForManufacturer(selectedManufacturer)
+              : [];
+
+            return (
+              <div key={cIndex} className="rounded-lg border p-3">
+                <div className="mb-3 grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Controller label</Label>
+                    <Input
+                      value={controller.label}
+                      onChange={(e) => updateController(cIndex, { label: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Station count</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={48}
+                      value={controller.station_count}
+                      onChange={(e) =>
+                        updateController(cIndex, {
+                          station_count: parseInt(e.target.value) || 8,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Manufacturer</Label>
+                    <Select
+                      value={selectedManufacturer ?? ""}
+                      onValueChange={(manufacturerId) => {
+                        const firstModel = manufacturerId
+                          ? getModelsForManufacturer(
+                              manufacturerId as ControllerManufacturerId
+                            )[0]
+                          : null;
+                        updateController(cIndex, {
+                          controller_model_id: firstModel?.id ?? null,
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select manufacturer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONTROLLER_MANUFACTURERS.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Model</Label>
+                    <Select
+                      value={controller.controller_model_id ?? ""}
+                      onValueChange={(modelId) =>
+                        updateController(cIndex, {
+                          controller_model_id: modelId || null,
+                        })
+                      }
+                      disabled={!selectedManufacturer}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {modelsForManufacturer.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Station count</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={48}
-                    value={controller.station_count}
-                    onChange={(e) => {
-                      const updated = [...controllers];
-                      updated[cIndex] = {
-                        ...controller,
-                        station_count: parseInt(e.target.value) || 8,
-                      };
-                      setControllers(updated);
-                    }}
-                  />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {Array.from({ length: controller.station_count }, (_, i) => i + 1).map(
+                    (stationNum) => {
+                      const existing = controller.stations.find(
+                        (s) => s.station_number === stationNum
+                      );
+                      return (
+                        <div key={stationNum} className="flex items-center gap-2">
+                          <span className="w-16 text-sm text-muted-foreground">
+                            St. {stationNum}
+                          </span>
+                          <Select
+                            value={existing?.zone_id ?? ""}
+                            onValueChange={(zoneId) => {
+                              const stations = controller.stations.filter(
+                                (s) => s.station_number !== stationNum
+                              );
+                              if (zoneId) {
+                                stations.push({ station_number: stationNum, zone_id: zoneId });
+                              }
+                              updateController(cIndex, { stations });
+                            }}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Zone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {zones.map((z) => (
+                                <SelectItem key={z.id} value={z.id}>
+                                  {z.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    }
+                  )}
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {Array.from({ length: controller.station_count }, (_, i) => i + 1).map(
-                  (stationNum) => {
-                    const existing = controller.stations.find(
-                      (s) => s.station_number === stationNum
-                    );
-                    return (
-                      <div key={stationNum} className="flex items-center gap-2">
-                        <span className="w-16 text-sm text-muted-foreground">
-                          St. {stationNum}
-                        </span>
-                        <Select
-                          value={existing?.zone_id ?? ""}
-                          onValueChange={(zoneId) => {
-                            const updated = [...controllers];
-                            const stations = controller.stations.filter(
-                              (s) => s.station_number !== stationNum
-                            );
-                            if (zoneId) {
-                              stations.push({ station_number: stationNum, zone_id: zoneId });
-                            }
-                            updated[cIndex] = { ...controller, stations };
-                            setControllers(updated);
-                          }}
-                        >
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Zone" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {zones.map((z) => (
-                              <SelectItem key={z.id} value={z.id}>
-                                {z.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

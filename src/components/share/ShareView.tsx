@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { MapViewer } from "@/components/map/MapViewer";
 import { labelForEnum } from "@/components/map/zone-layer";
+import {
+  getControllerDisplayName,
+  getControllerModel,
+} from "@/lib/controllers/catalog";
 import {
   calculateAdjustedRuntime,
   calculatePropertyStartTimes,
@@ -313,9 +319,31 @@ export function ShareView({ property }: ShareViewProps) {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {property.controllers.map((controller) => (
+              {property.controllers.map((controller) => {
+                const model = getControllerModel(controller.controller_model_id);
+                const displayName = getControllerDisplayName(controller.controller_model_id);
+
+                return (
                 <div key={controller.id} className="rounded-lg border p-3">
-                  <p className="mb-2 font-medium">{controller.label}</p>
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{controller.label}</p>
+                      {displayName && (
+                        <p className="text-xs text-muted-foreground">{displayName}</p>
+                      )}
+                    </div>
+                    {model && (
+                      <Link
+                        href={model.manualUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-sky-600 hover:underline dark:text-sky-400"
+                      >
+                        {model.manualTitle}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-1">
                     {controller.zone_stations.map((station) => {
                       const zone = property.zones.find((z) => z.id === station.zone_id);
@@ -343,7 +371,8 @@ export function ShareView({ property }: ShareViewProps) {
                     })}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </CardContent>
         </Card>

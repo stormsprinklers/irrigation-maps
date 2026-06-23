@@ -16,6 +16,9 @@ export function AppHeader() {
           <Link href="/dashboard" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
             Dashboard
           </Link>
+          <Link href="/settings" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+            Settings
+          </Link>
           <form action={signOutAction}>
             <Button variant="outline" size="sm" type="submit">
               Sign out

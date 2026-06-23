@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CreatePropertyButton } from "@/components/dashboard/create-property-button";
 import { PropertyActions } from "@/components/dashboard/property-actions";
+import { RemovePropertyButton } from "@/components/dashboard/remove-property-button";
 
 export default async function DashboardPage() {
   let properties: Awaited<ReturnType<typeof getDashboardProperties>> = [];
@@ -98,6 +99,7 @@ export default async function DashboardPage() {
                   {property.share_slug && (
                     <PropertyActions shareSlug={property.share_slug} />
                   )}
+                  <RemovePropertyButton propertyId={property.id} address={property.address} />
                 </CardContent>
               </Card>
             ))}

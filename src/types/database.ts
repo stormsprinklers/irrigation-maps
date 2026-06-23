@@ -79,6 +79,7 @@ export type Controller = {
   label: string;
   geometry: GeoJsonPoint;
   station_count: number;
+  controller_model_id: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -260,6 +260,7 @@ export async function saveEquipmentStep(propertyId: string, data: EquipmentStepD
         label: controller.label,
         geometry: controller.geometry as GeoJsonPoint,
         station_count: controller.station_count,
+        controller_model_id: controller.controller_model_id ?? null,
       })
       .select()
       .single();
@@ -307,12 +308,24 @@ export async function publishProperty(propertyId: string) {
 }
 
 export async function archiveProperty(propertyId: string) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
+
+  const { data: property, error: fetchError } = await supabase
+    .from("properties")
+    .select("id")
+    .eq("id", propertyId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (fetchError || !property) {
+    throw new Error("Property not found");
+  }
 
   const { error } = await supabase
     .from("properties")
     .update({ status: "archived", is_public: false })
-    .eq("id", propertyId);
+    .eq("id", propertyId)
+    .eq("user_id", user.id);
 
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard");

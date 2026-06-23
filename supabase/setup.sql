@@ -76,6 +76,7 @@ create table if not exists public.controllers (
   label text not null,
   geometry jsonb not null,
   station_count int not null default 8,
+  controller_model_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -334,3 +335,10 @@ create policy "Public read property images"
   on storage.objects for select
   to public
   using (bucket_id = 'property-images');
+
+-- =============================================================================
+-- Migration 004: Controller model for manual links
+-- =============================================================================
+
+alter table public.controllers
+  add column if not exists controller_model_id text;

@@ -57,6 +57,7 @@ export const controllerSchema = z.object({
     coordinates: z.tuple([z.number(), z.number()]),
   }),
   station_count: z.number().int().min(1).max(48),
+  controller_model_id: z.string().nullable().optional(),
   stations: z.array(
     z.object({
       station_number: z.number().int().min(1),
